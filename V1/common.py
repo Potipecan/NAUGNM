@@ -51,6 +51,9 @@ def plot_results(*histories, suffix: Literal['history', 'test'] ='history', metr
     plt.show()
 
 def init_model(input_dim, units, dropout_rate = 0.0, reg = None):    
+    model_name = f'model_{input_dim}_{units}'
+    if reg is not None:
+        model_name += '_l2'
     l = [
         layers.Input((input_dim,)),
         layers.Dense(units, activation='relu', kernel_regularizer=reg),
@@ -59,24 +62,26 @@ def init_model(input_dim, units, dropout_rate = 0.0, reg = None):
     ]
     
     if dropout_rate > 0:
+        model_name += f'_do{dropout_rate}'
         l.insert(3, layers.Dropout(dropout_rate))
 
     model = keras.models.Sequential(l)
+    model.name = model_name
     model.summary()
     return model
 
-def train(model: keras.Model, x, y, model_name):
+def train(model: keras.Model, x, y):
     opt = keras.optimizers.Adam(learning_rate=1e-3)
     model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-    history = model.fit(x, y, epochs=20, validation_split=0.2)
+    history = model.fit(x, y, epochs=20, validation_split=0.2, verbose=0)
     df = DataFrame(history.history)
-    df.to_csv(history_dir / f'{model_name}.history.csv')
+    df.to_csv(history_dir / f'{model.name}.history.csv')
     return df
 
-def test(model: keras.Model, x, y, model_name):
+def test(model: keras.Model, x, y):
     results = model.evaluate(x, y)
     df = DataFrame(columns=('loss', 'accuracy'), data=[results])
-    df.to_csv(history_dir / f'{model_name}.test.csv')
+    df.to_csv(history_dir / f'{model.name}.test.csv')
     return df
     
 
