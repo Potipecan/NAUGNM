@@ -17,12 +17,12 @@ class BasicAutoencoder(torch.nn.Module):
         self.latent = Linear(coder_dims[-1], latent_dim)
 
         for idx, (i, o) in enumerate(pairwise(chain([flat_input], coder_dims))):
-            self.encoder.add_module(f'Enc_linear_{idx}', Linear(i, o))
-            self.encoder.add_module(f'Enc_RElU_{idx}', ReLU(inplace=True))
+            self.encoder.add_module(f'Linear_{idx}', Linear(i, o))
+            self.encoder.add_module(f'RElU_{idx}', ReLU(inplace=True))
 
         for idx, (i, o) in enumerate(pairwise(chain([latent_dim], coder_dims[::-1], [flat_input]))):
-            self.decoder.add_module(f'Dec_linear_{idx}', Linear(i, o))
-            self.decoder.add_module(f'Dec_RElU_{idx}', ReLU(inplace=True) if idx < len(coder_dims) else Sigmoid())
+            self.decoder.add_module(f'Linear_{idx}', Linear(i, o))
+            self.decoder.add_module(f'RElU_{idx}', ReLU(inplace=True) if idx < len(coder_dims) else Sigmoid())
 
     def forward(self, x):
         x = self.flatten(x)
@@ -32,6 +32,9 @@ class BasicAutoencoder(torch.nn.Module):
         x = self.unflatten(x)
         return x
 
+class VariadicAE(torch.nn.Module):
+    def __init__(self, input_size, latent_dim, coder_dims):
+        super().__init__()
 
 def train(model: Module, device, train_loader, val_loader, optimizer, loss_f, epochs, model_name, model_dir='weights') -> pandas.DataFrame:
 
