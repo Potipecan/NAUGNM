@@ -16,6 +16,7 @@ def load_models(*model_names,
 def plot_history(model_name, history_dir = 'histories'):
     df = pandas.read_csv(os.path.join(history_dir, f'{model_name}.history.csv'))
     plot = df[['loss', 'val_loss']].plot()
+    plot.set_title(f'Training history of model {model_name}')
     plot.set_xlabel('Epoch')
     plot.set_ylabel('Loss')
 
@@ -29,6 +30,7 @@ def show_examples(images: torch.Tensor,
         with torch.no_grad():
             imgs = model(images)
         for ax, img in zip(ax_col, imgs):
-            ax.imshow(img.numpy().squeeze(), cmap='gray')
+            img = img.permute(1, 2, 0).squeeze()
+            ax.imshow(img.numpy().squeeze())
             ax.set_axis_off()
     fig.tight_layout()

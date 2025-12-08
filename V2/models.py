@@ -75,13 +75,15 @@ class BetaKLDivLoss(Module):
     def forward(self, pred, target):
         return self.rec_loss(pred, target) / pred.size(0) + self.beta * self.kld_loss(pred, target)
 
-def train(model: Module, device, train_loader, val_loader, optimizer, loss_f, epochs, model_name, model_dir='weights') -> pandas.DataFrame:
+def train(model: Module, device, train_loader, val_loader, optimizer, loss_f, epochs, model_name, model_dir='weights', patience=10000, epsilon=0.0) -> pandas.DataFrame:
 
     scaler = torch.amp.GradScaler()
     columns = ['loss', 'val_loss']
     rows = []
 
     best_val_loss = float('inf')
+    no_improvement = 0
+    last_loss = float('inf')
 
     for epoch in range(epochs):
         torch.cuda.empty_cache()
@@ -121,6 +123,17 @@ def train(model: Module, device, train_loader, val_loader, optimizer, loss_f, ep
 
         rows.append([tr_loss, val_loss])
         print(f'Epoch {epoch + 1}: Train loss: {tr_loss:.6f}, Validation loss: {val_loss}')
+
+        # early stopping
+        if abs(val_loss - last_loss) < epsilon:
+            no_improvement += 1
+            if no_improvement >= patience:
+                print(f'Patience exceeded. Stopping on epoch {epoch + 1} ...')
+                break
+        else:
+            no_improvement = 0
+            last_loss = val_loss
+
     torch.save(model, os.path.join(model_dir, f'{model_name}.final.pth'))
 
     return pandas.DataFrame(rows, columns=columns)
