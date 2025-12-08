@@ -35,6 +35,45 @@ class BasicAutoencoder(torch.nn.Module):
 class VariadicAE(torch.nn.Module):
     def __init__(self, input_size, latent_dim, coder_dims):
         super().__init__()
+        flat_input = math.prod(input_size)
+        self.flatten = Flatten()
+        self.unflatten = Unflatten(dim=1, unflattened_size=input_size)
+
+        self.encoder = torch.nn.Sequential()
+        self.decoder = torch.nn.Sequential()
+        self.logvar_layer = Linear(coder_dims[-1], latent_dim)
+        self.mean_layer = Linear(coder_dims[-1], latent_dim)
+
+        for idx, (i, o) in enumerate(pairwise(chain([flat_input], coder_dims))):
+            self.encoder.add_module(f'Linear_{idx}', Linear(i, o))
+            self.encoder.add_module(f'RElU_{idx}', ReLU(inplace=True))
+
+        for idx, (i, o) in enumerate(pairwise(chain([latent_dim], coder_dims[::-1], [flat_input]))):
+            self.decoder.add_module(f'Linear_{idx}', Linear(i, o))
+            self.decoder.add_module(f'RElU_{idx}', ReLU(inplace=True) if idx < len(coder_dims) else Sigmoid())
+
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.encoder(x)
+        mean, logvar = self.mean_layer(x), self.logvar_layer(x)
+
+        z = torch.randn_like(mean)
+        z.mul_(logvar)
+        z.add_(mean)
+
+        y = self.decoder(z)
+        y = self.unflatten(y)
+        return y
+
+class BetaKLDivLoss(Module):
+    def __init__(self, beta=1):
+        super().__init__()
+        self.beta = beta
+        self.rec_loss = MSELoss(reduction='sum')
+        self.kld_loss = KLDivLoss(reduction='batchmean')
+
+    def forward(self, pred, target):
+        return self.rec_loss(pred, target) / pred.size(0) + self.beta * self.kld_loss(pred, target)
 
 def train(model: Module, device, train_loader, val_loader, optimizer, loss_f, epochs, model_name, model_dir='weights') -> pandas.DataFrame:
 
