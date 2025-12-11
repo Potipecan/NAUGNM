@@ -43,6 +43,7 @@ class VariadicAE(torch.nn.Module):
         self.decoder = torch.nn.Sequential()
         self.logvar_layer = Linear(coder_dims[-1], latent_dim)
         self.mean_layer = Linear(coder_dims[-1], latent_dim)
+        self.output_mean_std = False
 
         for idx, (i, o) in enumerate(pairwise(chain([flat_input], coder_dims))):
             self.encoder.add_module(f'Linear_{idx}', Linear(i, o))
@@ -63,6 +64,8 @@ class VariadicAE(torch.nn.Module):
 
         y = self.decoder(z)
         y = self.unflatten(y)
+        if self.output_mean_std:
+            return y, mean, logvar
         return y
 
 class BetaKLDivLoss(Module):
@@ -70,10 +73,16 @@ class BetaKLDivLoss(Module):
         super().__init__()
         self.beta = beta
         self.rec_loss = MSELoss(reduction='sum')
-        self.kld_loss = KLDivLoss(reduction='batchmean')
+
+    @staticmethod
+    def _kl_div_loss(z_mean, z_logvar):
+        kl_loss = -0.5 * torch.sum(1 + z_logvar - z_mean ** 2 - torch.exp(z_logvar), dim=1)
+        kl_loss = kl_loss.mean()
+        return kl_loss
 
     def forward(self, pred, target):
-        return self.rec_loss(pred, target) / pred.size(0) + self.beta * self.kld_loss(pred, target)
+        pred, z_mean, z_logvar = pred
+        return self.rec_loss(pred, target) / pred.size(0) + self.beta * BetaKLDivLoss._kl_div_loss(z_mean, z_logvar)
 
 def train(model: Module, device, train_loader, val_loader, optimizer, loss_f, epochs, model_name, model_dir='weights', patience=10000, epsilon=0.0) -> pandas.DataFrame:
 
