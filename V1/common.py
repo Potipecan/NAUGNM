@@ -4,6 +4,7 @@ from typing import Literal
 import keras
 import keras.layers as layers
 import pandas
+import pandas as pd
 from keras.datasets import imdb
 import numpy as np
 import torchinfo
@@ -32,9 +33,10 @@ def load_results(model_name, suffix: Literal['history', 'test'] = 'history'):
     df = pandas.read_csv(history_dir / f'{model_name}.{suffix}.csv')
     return df
 
-def plot_results(*histories, suffix: Literal['history', 'test'] ='history', metrics=('loss', 'accuracy'), metric_prefix=('val',)):
+def plot_results(*histories, suffix: Literal['history', 'test'] ='history', metrics=('loss', 'accuracy'), metric_prefix=('val',), learning_rates=(1e-3,)):
     
     hdf = [load_results(h, suffix) for h in histories]
+
     fig, axes = plt.subplots(len(metrics), len(histories), sharey='row')
     if axes.ndim < 2:
         axes = axes[:, np.newaxis]
@@ -43,8 +45,12 @@ def plot_results(*histories, suffix: Literal['history', 'test'] ='history', metr
         col[-1].set_xlabel("epoch")
 
         for m, ax in zip(metrics, col):
-            cols = [m] + [f'{p}_{m}' for p in metric_prefix]
-            plot = h[cols].plot(ax=ax)
+            cols = [f'{m} LR={lr:.0e}' for lr in learning_rates] + [f'{p}_{m} LR={lr:.0e}' for p in metric_prefix for lr in learning_rates]
+            try:
+                plot = h[cols].plot(ax=ax)
+            except KeyError:
+                cols = [m] + [f'{p}_{m}' for p in metric_prefix]
+                plot = h[cols].plot(ax=ax)
             plot.set_ylabel(m)
 
     plt.tight_layout()
@@ -67,16 +73,22 @@ def init_model(input_dim, units, dropout_rate = 0.0, reg = None):
 
     model = keras.models.Sequential(l)
     model.name = model_name
-    model.summary()
+    # model.summary()
     return model
-
-def train(model: keras.Model, x, y):
-    opt = keras.optimizers.Adam(learning_rate=1e-3)
-    model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-    history = model.fit(x, y, epochs=20, validation_split=0.2, verbose=0)
-    df = DataFrame(history.history)
-    df.to_csv(history_dir / f'{model.name}.history.csv')
-    return df
+import pickle
+def train(model: keras.Model, x, y, learning_rates=(1e-3,)):
+    h = pd.DataFrame()
+    for lr in learning_rates:
+        m = keras.models.clone_model(model)
+        opt = keras.optimizers.Adam(learning_rate=lr)
+        m.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
+        history = m.fit(x, y, epochs=20, validation_split=0.2, verbose=0)
+        h[f'loss LR={lr:.0e}'] = history.history['loss']
+        h[f'val_loss LR={lr:.0e}'] = history.history['val_loss']
+        h[f'accuracy LR={lr:.0e}'] = history.history['accuracy']
+        h[f'val_accuracy LR={lr:.0e}'] = history.history['val_accuracy']
+    h.to_csv(history_dir / f'{model.name}.history.csv')
+    return h
 
 def test(model: keras.Model, x, y):
     results = model.evaluate(x, y)
